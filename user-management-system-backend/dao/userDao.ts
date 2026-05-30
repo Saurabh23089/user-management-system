@@ -71,11 +71,23 @@ async function getAllUsers(page: number, limit: number) {
 
 }
 
+async function verifyEmail(email:string){
+    return prisma.user.update({
+        where: {
+            email:email
+        },
+        data: {
+            is_email_verified: true
+        }
+    });
+}
+
 export {
     findUserByEmail,
     createUser,
     countUsersByRole,
     saveRefreshToken,
     findUserById,
-    getAllUsers
+    getAllUsers,
+    verifyEmail
 }

@@ -28,7 +28,17 @@ model User {
   updated_at DateTime @updatedAt
 
   refresh_token String?
+  is_email_verified Boolean @default(false)
 
   failed_attempt_count Int       @default(0)
   last_login           DateTime?
 }
+
+// model VerificationToken {
+//   id Int @id@default(autoIncrement())
+//   token String @unique
+//   user_id Int
+//   expires_at DateTime
+//   created_at DateTime @default(now())
+//   user User @relation(fields:[user_id], references:[id],onDelete:Cascade)
+// }

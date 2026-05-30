@@ -62,7 +62,7 @@ async function getUserProfile(
 
         const id = req?.params?.id;
 
-        console.log('id is ',id);
+        console.log('id is ', id);
 
         if (!id) {
             throw new AppError('User id is required', 400);
@@ -88,16 +88,16 @@ async function getUserProfile(
 
 
 async function getAllUsers(
-    req:Request,
-    res:Response,
-    next:NextFunction
-){
+    req: Request,
+    res: Response,
+    next: NextFunction
+) {
     try {
-        
+
         const page = Number(req?.query?.page) || 1;
         const limit = Number(req?.query?.limit) || 10;
 
-        const userData = await userService.getAllUsers(page,limit);
+        const userData = await userService.getAllUsers(page, limit);
 
         return res.status(200).json(
             new ApiResponse(
@@ -109,10 +109,39 @@ async function getAllUsers(
 
 
     }
-    catch(error) {
-        console.log('Error while fteching all the users',error);
+    catch (error) {
+        console.log('Error while fteching all the users', error);
         next(error);
     }
 }
 
-export { userSignup, userLogin,getUserProfile,getAllUsers }
+
+async function verifyEmail(
+    req: Request,
+    res: Response,
+    next: NextFunction
+) {
+    try {
+
+        const verificationToken = req?.query?.token as string;
+        if (!verificationToken) {
+            throw new AppError('Token is required', 400);
+        }
+
+         await userService.verifyEmail(verificationToken);
+
+        return res.status(201).json(
+            new ApiResponse(
+                true,
+                'Email Verified Successfully',
+            )
+        )
+
+    }
+    catch(error) {
+        console.log('Error while verifying the email', error);
+        next(error);
+    }
+}
+
+export { userSignup, userLogin, getUserProfile, getAllUsers,verifyEmail }

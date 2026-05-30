@@ -2,8 +2,10 @@ import * as userDao from '../dao/userDao'
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
+import crypto from 'crypto';
 import { AppError } from '../utils/appError'
-import { sanitizeUser } from '../utils/sanitizeUser'
+import { sanitizeUser } from '../utils/sanitizeUser';
+import { sendVerificationEmail } from './emailService'
 
 dotenv.config();
 
@@ -18,7 +20,6 @@ interface loginPayload {
     email: string,
     password: string
 }
-
 
 async function userSignUp(payload: signUpPayload) {
     const { name, email, password, role } = payload;
@@ -58,6 +59,38 @@ async function userSignUp(payload: signUpPayload) {
 
     }
 
+    const tokenPayload = JSON.stringify({
+        email: email,
+        expiresAt: Date.now() + 0.5 * 60 * 60 * 1000
+    })
+
+
+    const encodedPayload = Buffer
+        .from(tokenPayload)
+        .toString('base64url');
+
+    console.log('secret', process.env.EMAIL_SECRET)
+
+    const signature = crypto
+        .createHmac(
+            'sha256',
+            process.env.EMAIL_SECRET as string
+        )
+        .update(encodedPayload)
+        .digest('hex');
+
+    const verificationToken =
+        `${encodedPayload}.${signature}`;
+
+    console.log('verification token', verificationToken)
+
+    const verificationLink =
+        `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
+
+    await sendVerificationEmail(
+        email,
+        verificationLink
+    );
     const user = await userDao.createUser(userPayload);
     return user;
 
@@ -128,38 +161,113 @@ async function userLogin(payload: loginPayload) {
 
 }
 
-async function getUserProfile(id:number){
+async function getUserProfile(id: number) {
 
-        const userData = await userDao.findUserById(Number(id));
+    const userData = await userDao.findUserById(Number(id));
 
-        if(!userData){
-            throw new AppError('User not found',400);
-        }
-    
-        return sanitizeUser(userData);  
+    if (!userData) {
+        throw new AppError('User not found', 400);
+    }
+
+    return sanitizeUser(userData);
 }
 
 async function getAllUsers(
-   page:number,
-   limit:number
+    page: number,
+    limit: number
 ) {
 
-    const {users,totalUsers} = await userDao.getAllUsers(page,limit);
+    const { users, totalUsers } = await userDao.getAllUsers(page, limit);
     const sanitizedUsers = users.map((user) => sanitizeUser(user));
 
     return {
-        users:sanitizedUsers,
-        meta:{
-            page:page,
-            limit:limit,
-            totalUsers:totalUsers,
-            totalPages:Math.ceil(totalUsers/limit)
+        users: sanitizedUsers,
+        meta: {
+            page: page,
+            limit: limit,
+            totalUsers: totalUsers,
+            totalPages: Math.ceil(totalUsers / limit)
         }
     }
-    
+
+}
+
+async function verifyEmail(
+    verificationToken: string
+) {
+    const [encodedPayload, signature] = verificationToken.split('.');
+
+    if (!encodedPayload || !signature) {
+        throw new AppError(
+            'Invalid verification token',
+            400
+        );
+    }
+
+    const expectedSignature = crypto
+        .createHmac(
+            'sha256',
+            process.env.EMAIL_SECRET as string
+        )
+        .update(encodedPayload)
+        .digest('hex');
+
+    if (signature !== expectedSignature) {
+        throw new AppError(
+            'Invalid verification token',
+            400
+        );
+    }
+
+    const payload = JSON.parse(
+        Buffer
+            .from(encodedPayload, 'base64url')
+            .toString()
+    );
+
+    const {
+        email,
+        expiresAt
+    } = payload;
+
+    if (!email) {
+        throw new AppError(
+            'Invalid verification token',
+            400
+        );
+    }
+
+    if (Date.now() > expiresAt) {
+        throw new AppError(
+            'Verification token has expired',
+            400
+        );
+    }
+
+    const user =
+        await userDao.findUserByEmail(email);
+
+    if (!user) {
+        throw new AppError(
+            'User not found',
+            404
+        );
+    }
+
+    if (user.is_email_verified) {
+        throw new AppError(
+            'Email already verified',
+            400
+        );
+    }
+
+    await userDao.verifyEmail(user.email);
+
 
 
 }
+
+
 
 
 
@@ -167,5 +275,6 @@ export {
     userSignUp,
     userLogin,
     getUserProfile,
-    getAllUsers
+    getAllUsers,
+    verifyEmail
 }
